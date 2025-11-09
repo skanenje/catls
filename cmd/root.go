@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spf13/cobra"
 	"catls/internal"
+
+	"github.com/spf13/cobra"
 )
 
 // Config holds runtime options
@@ -35,34 +36,42 @@ to produce AI-friendly Markdown or JSON output.`,
 		// Determine if full content is needed (JSON always includes full content)
 		fullContent := cfg.OutputMode == "json"
 
-		// Scan filesystem
-		entries, err := internal.ScanDir(cfg.Path, cfg.MaxDepth, cfg.Ignore, cfg.ShowContent, cfg.Lines, fullContent)
-		if err != nil {
-			return err
+		// Buffered channel for streaming entries
+		entriesChan := make(chan internal.FileEntry, 100)
+
+		// Launch scanner in a goroutine
+		go func() {
+			err := internal.ScanDirStream(cfg.Path, cfg.MaxDepth, cfg.Ignore, cfg.ShowContent, cfg.Lines, fullContent, entriesChan)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error scanning directory: %v\n", err)
+			}
+		}()
+
+		// Writer function for formatter
+		writerFunc := func(s string) {
+			if cfg.OutputFile != "" {
+				f, err := os.OpenFile(cfg.OutputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error writing file: %v\n", err)
+					return
+				}
+				defer f.Close()
+				f.WriteString(s)
+			} else {
+				fmt.Print(s)
+			}
 		}
 
-		// Summary-only mode
+		// Summary-only mode: print basic info without content
 		if cfg.Summary {
-			for _, e := range entries {
-				fmt.Printf("[%s] %s (%d bytes, depth=%d)\n", e.Kind, e.Path, e.Size, e.Depth)
+			for entry := range entriesChan {
+				fmt.Printf("[%s] %s (%d bytes, depth=%d)\n", entry.Kind, entry.Path, entry.Size, entry.Depth)
 			}
 			return nil
 		}
 
-		// Format output
-		output, err := internal.FormatEntries(entries, internal.FormatMode(cfg.OutputMode))
-		if err != nil {
-			return err
-		}
-
-		// Write to file or stdout
-		if cfg.OutputFile != "" {
-			return os.WriteFile(cfg.OutputFile, []byte(output), 0644)
-		} else {
-			fmt.Print(output)
-		}
-
-		return nil
+		// Stream entries to formatter
+		return internal.StreamFormatEntries(entriesChan, internal.FormatMode(cfg.OutputMode), writerFunc)
 	},
 }
 

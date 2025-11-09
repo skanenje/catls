@@ -11,7 +11,7 @@ import (
 // FileEntry represents one filesystem entity.
 type FileEntry struct {
 	Path    string
-	Kind    string // "file" or "dir"
+	Kind    string // "file", "dir", "symlink"
 	Size    int64
 	Depth   int
 	Content string
@@ -19,18 +19,16 @@ type FileEntry struct {
 	Error   string
 }
 
-// ScanDir walks the directory recursively and returns entries.
-// showContent: preview for Markdown
-// lines: number of lines to preview
-// fullContent: if true, reads full file (used for JSON output)
-func ScanDir(root string, maxDepth int, ignore []string, showContent bool, lines int, fullContent bool) ([]FileEntry, error) {
-	var entries []FileEntry
+// ScanDirStream walks the directory recursively and streams entries into a channel.
+// fullContent = true to read full files (used for JSON output), false for preview/Markdown
+func ScanDirStream(root string, maxDepth int, ignore []string, showContent bool, lines int, fullContent bool, out chan<- FileEntry) error {
+	defer close(out)
 
 	rootAbs, _ := filepath.Abs(root)
 
-	err := filepath.WalkDir(rootAbs, func(path string, d fs.DirEntry, err error) error {
+	return filepath.WalkDir(rootAbs, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			entries = append(entries, FileEntry{Path: path, Error: err.Error()})
+			out <- FileEntry{Path: path, Error: err.Error()}
 			return nil
 		}
 
@@ -63,7 +61,7 @@ func ScanDir(root string, maxDepth int, ignore []string, showContent bool, lines
 
 		info, err := d.Info()
 		if err != nil {
-			entries = append(entries, FileEntry{Path: path, Error: err.Error()})
+			out <- FileEntry{Path: path, Error: err.Error()}
 			return nil
 		}
 
@@ -83,21 +81,9 @@ func ScanDir(root string, maxDepth int, ignore []string, showContent bool, lines
 			}
 		}
 
-		entries = append(entries, entry)
+		out <- entry
 		return nil
 	})
-
-	return entries, err
-}
-
-func kindFromDirEntry(d fs.DirEntry) string {
-	if d.IsDir() {
-		return "dir"
-	}
-	if d.Type()&fs.ModeSymlink != 0 {
-		return "symlink"
-	}
-	return "file"
 }
 
 // readFileContent reads first n lines or full content based on 'full'
@@ -131,4 +117,14 @@ func readFileContent(path string, n int, full bool) (string, bool) {
 	}
 
 	return strings.Join(lines, "\n"), true
+}
+
+func kindFromDirEntry(d fs.DirEntry) string {
+	if d.IsDir() {
+		return "dir"
+	}
+	if d.Type()&fs.ModeSymlink != 0 {
+		return "symlink"
+	}
+	return "file"
 }

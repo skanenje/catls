@@ -3,100 +3,62 @@ package internal
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 )
 
-// FormatMode defines supported output types
+// FormatMode defines output format
 type FormatMode string
 
 const (
 	Markdown FormatMode = "markdown"
-	JSON     FormatMode = "json"
+	JSONMode FormatMode = "json"
 )
 
-// FormatEntries formats a list of FileEntry into Markdown or JSON
-func FormatEntries(entries []FileEntry, mode FormatMode) (string, error) {
-	switch mode {
-	case Markdown:
-		return formatMarkdown(entries), nil
-	case JSON:
-		return formatJSON(entries)
-	default:
-		return "", fmt.Errorf("unsupported format: %s", mode)
-	}
-}
-
-// ------------------- Markdown -------------------
-
-func formatMarkdown(entries []FileEntry) string {
-	var sb strings.Builder
-
-	for _, e := range entries {
-		if e.Kind == "dir" {
-			sb.WriteString(fmt.Sprintf("\n## 📁 %s\n", e.Path))
-		} else if e.Kind == "file" {
-			sb.WriteString(fmt.Sprintf("\n### 📄 %s\n", e.Path))
-			sb.WriteString(fmt.Sprintf("@type: file\n@size: %d bytes\n", e.Size))
-
-			lang := detectLanguage(e.Path)
-			if lang != "" {
-				sb.WriteString(fmt.Sprintf("@language: %s\n", lang))
+// StreamFormatEntries consumes entries from channel and writes formatted output
+func StreamFormatEntries(entries <-chan FileEntry, mode FormatMode, writer func(string)) error {
+	if mode == JSONMode {
+		writer("[\n")
+		first := true
+		for e := range entries {
+			if !first {
+				writer(",\n")
 			}
-
-			if e.Content != "" {
-				sb.WriteString("```" + lang + "\n")
-				sb.WriteString(e.Content + "\n")
-				sb.WriteString("```\n")
+			first = false
+			data, _ := json.MarshalIndent(e, "  ", "  ")
+			writer(string(data))
+		}
+		writer("\n]\n")
+	} else { // Markdown
+		for e := range entries {
+			if e.Kind == "dir" {
+				writer(fmt.Sprintf("## 📁 %s\n\n", e.Path))
+			} else {
+				writer(fmt.Sprintf("### 📄 %s\n@type: %s\n@size: %d bytes\n\n```%s\n%s\n```\n\n",
+					e.Path, e.Kind, e.Size, detectLanguage(e.Path), e.Content))
 			}
-
-			sb.WriteString("---\n")
 		}
 	}
-
-	return sb.String()
+	return nil
 }
 
-// ------------------- JSON -------------------
-
-func formatJSON(entries []FileEntry) (string, error) {
-	data, err := json.MarshalIndent(entries, "", "  ")
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
-}
-
-// ------------------- Helper -------------------
-
+// Simple extension-based language detection
 func detectLanguage(path string) string {
-	if dot := strings.LastIndex(path, "."); dot != -1 && dot < len(path)-1 {
-		ext := path[dot+1:]
-		switch ext {
-		case "go":
-			return "go"
-		case "rs":
-			return "rust"
-		case "js":
-			return "javascript"
-		case "ts":
-			return "typescript"
-		case "py":
-			return "python"
-		case "java":
-			return "java"
-		case "c":
-			return "c"
-		case "cpp":
-			return "cpp"
-		case "html":
-			return "html"
-		case "css":
-			return "css"
-		case "md":
-			return "markdown"
-		default:
-			return ""
-		}
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".go":
+		return "go"
+	case ".rs":
+		return "rust"
+	case ".js":
+		return "javascript"
+	case ".ts":
+		return "typescript"
+	case ".py":
+		return "python"
+	case ".java":
+		return "java"
+	default:
+		return ""
 	}
-	return ""
 }
