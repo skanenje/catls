@@ -8,25 +8,39 @@ import (
 
 // FileEntry represents one filesystem entity.
 type FileEntry struct {
-	Path      string
-	Kind      string // "file" or "dir"
-	Size      int64
-	Depth     int
-	Ignored   bool
-	Error     string
+	Path    string
+	Kind    string // "file" or "dir"
+	Size    int64
+	Depth   int
+	Ignored bool
+	Error   string
 }
 
 // ScanDir walks the directory recursively and returns entries.
 func ScanDir(root string, maxDepth int, ignore []string) ([]FileEntry, error) {
 	var entries []FileEntry
 
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	// Clean the root path so depth is consistent
+	rootAbs, _ := filepath.Abs(root)
+
+	err := filepath.WalkDir(rootAbs, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			entries = append(entries, FileEntry{Path: path, Error: err.Error()})
 			return nil
 		}
 
-		depth := strings.Count(filepath.ToSlash(path), "/") - strings.Count(filepath.ToSlash(root), "/")
+		// --- FIXED DEPTH CALCULATION ---
+		rel, err := filepath.Rel(rootAbs, path)
+		if err != nil {
+			rel = path
+		}
+		depth := 0
+		if rel != "." {
+			depth = strings.Count(filepath.ToSlash(rel), "/") + 1
+		}
+		// -------------------------------
+
+		// Respect max-depth
 		if maxDepth >= 0 && depth > maxDepth {
 			if d.IsDir() {
 				return filepath.SkipDir
