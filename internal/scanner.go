@@ -20,7 +20,10 @@ type FileEntry struct {
 }
 
 // ScanDir walks the directory recursively and returns entries.
-func ScanDir(root string, maxDepth int, ignore []string, showContent bool, lines int) ([]FileEntry, error) {
+// showContent: preview for Markdown
+// lines: number of lines to preview
+// fullContent: if true, reads full file (used for JSON output)
+func ScanDir(root string, maxDepth int, ignore []string, showContent bool, lines int, fullContent bool) ([]FileEntry, error) {
 	var entries []FileEntry
 
 	rootAbs, _ := filepath.Abs(root)
@@ -31,7 +34,7 @@ func ScanDir(root string, maxDepth int, ignore []string, showContent bool, lines
 			return nil
 		}
 
-		// --- Depth calculation ---
+		// Depth calculation
 		rel, err := filepath.Rel(rootAbs, path)
 		if err != nil {
 			rel = path
@@ -71,9 +74,11 @@ func ScanDir(root string, maxDepth int, ignore []string, showContent bool, lines
 			Depth: depth,
 		}
 
-		// --- Read file content if requested ---
-		if showContent && !d.IsDir() && info.Size() > 0 {
-			if content, ok := readFilePreview(path, lines); ok {
+		// Read file content if requested
+		if !d.IsDir() && info.Size() > 0 {
+			readFull := fullContent || showContent
+			content, ok := readFileContent(path, lines, readFull)
+			if ok {
 				entry.Content = content
 			}
 		}
@@ -95,15 +100,15 @@ func kindFromDirEntry(d fs.DirEntry) string {
 	return "file"
 }
 
-// readFilePreview reads first n lines of a text file, skips binary files
-func readFilePreview(path string, n int) (string, bool) {
+// readFileContent reads first n lines or full content based on 'full'
+func readFileContent(path string, n int, full bool) (string, bool) {
 	f, err := os.Open(path)
 	if err != nil {
 		return "", false
 	}
 	defer f.Close()
 
-	// Simple binary check: skip files with null bytes
+	// Skip binary files
 	buf := make([]byte, 8000)
 	count, _ := f.Read(buf)
 	if strings.ContainsRune(string(buf[:count]), '\x00') {
@@ -114,8 +119,15 @@ func readFilePreview(path string, n int) (string, bool) {
 
 	scanner := bufio.NewScanner(f)
 	var lines []string
-	for i := 0; i < n && scanner.Scan(); i++ {
-		lines = append(lines, scanner.Text())
+
+	if full {
+		for scanner.Scan() {
+			lines = append(lines, scanner.Text())
+		}
+	} else {
+		for i := 0; i < n && scanner.Scan(); i++ {
+			lines = append(lines, scanner.Text())
+		}
 	}
 
 	return strings.Join(lines, "\n"), true

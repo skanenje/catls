@@ -1,12 +1,11 @@
 package cmd
 
 import (
-	"catls/internal"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
+	"catls/internal"
 )
 
 // Config holds runtime options
@@ -24,7 +23,6 @@ type Config struct {
 
 var cfg Config
 
-// rootCmd is the base command
 var rootCmd = &cobra.Command{
 	Use:   "catls [path]",
 	Short: "catls merges cat + ls to serialize structure and content",
@@ -34,20 +32,34 @@ to produce AI-friendly Markdown or JSON output.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg.Path = args[0]
 
-		entries, err := internal.ScanDir(cfg.Path, cfg.MaxDepth, cfg.Ignore, cfg.ShowContent, cfg.Lines)
+		// Determine if full content is needed (JSON always includes full content)
+		fullContent := cfg.OutputMode == "json"
+
+		// Scan filesystem
+		entries, err := internal.ScanDir(cfg.Path, cfg.MaxDepth, cfg.Ignore, cfg.ShowContent, cfg.Lines, fullContent)
 		if err != nil {
 			return err
 		}
 
-		for _, e := range entries {
-			fmt.Printf("[%s] %s (%d bytes, depth=%d)\n", e.Kind, e.Path, e.Size, e.Depth)
-
-			if cfg.ShowContent && e.Content != "" {
-				lines := strings.Split(e.Content, "\n")
-				for _, l := range lines {
-					fmt.Printf("    %s\n", l)
-				}
+		// Summary-only mode
+		if cfg.Summary {
+			for _, e := range entries {
+				fmt.Printf("[%s] %s (%d bytes, depth=%d)\n", e.Kind, e.Path, e.Size, e.Depth)
 			}
+			return nil
+		}
+
+		// Format output
+		output, err := internal.FormatEntries(entries, internal.FormatMode(cfg.OutputMode))
+		if err != nil {
+			return err
+		}
+
+		// Write to file or stdout
+		if cfg.OutputFile != "" {
+			return os.WriteFile(cfg.OutputFile, []byte(output), 0644)
+		} else {
+			fmt.Print(output)
 		}
 
 		return nil
@@ -69,6 +81,6 @@ func init() {
 	rootCmd.Flags().StringSliceVar(&cfg.Ignore, "ignore", []string{".git", "node_modules"}, "Ignore patterns")
 	rootCmd.Flags().BoolVar(&cfg.Summary, "summary", false, "Structure only, no content")
 	rootCmd.Flags().StringVar(&cfg.OutputFile, "output", "", "Write output to file instead of stdout")
-	rootCmd.Flags().BoolVar(&cfg.ShowContent, "show-content", false, "Show file content preview")
+	rootCmd.Flags().BoolVar(&cfg.ShowContent, "show-content", false, "Show file content preview in Markdown")
 	rootCmd.Flags().IntVar(&cfg.Lines, "lines", 5, "Number of lines to preview if --show-content is true")
 }

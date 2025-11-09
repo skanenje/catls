@@ -38,7 +38,6 @@ func formatMarkdown(entries []FileEntry) string {
 			sb.WriteString(fmt.Sprintf("\n### 📄 %s\n", e.Path))
 			sb.WriteString(fmt.Sprintf("@type: file\n@size: %d bytes\n", e.Size))
 
-			// Simple language detection from extension
 			lang := detectLanguage(e.Path)
 			if lang != "" {
 				sb.WriteString(fmt.Sprintf("@language: %s\n", lang))
@@ -69,7 +68,6 @@ func formatJSON(entries []FileEntry) (string, error) {
 
 // ------------------- Helper -------------------
 
-// detectLanguage guesses file language from extension
 func detectLanguage(path string) string {
 	if dot := strings.LastIndex(path, "."); dot != -1 && dot < len(path)-1 {
 		ext := path[dot+1:]

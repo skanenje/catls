@@ -1,0 +1,92 @@
+[
+  {
+    "Path": "/home/zedolph/project-zero/catls",
+    "Kind": "dir",
+    "Size": 4096,
+    "Depth": 0,
+    "Content": "",
+    "Ignored": false,
+    "Error": ""
+  },
+  {
+    "Path": "/home/zedolph/project-zero/catls/cmd",
+    "Kind": "dir",
+    "Size": 4096,
+    "Depth": 1,
+    "Content": "",
+    "Ignored": false,
+    "Error": ""
+  },
+  {
+    "Path": "/home/zedolph/project-zero/catls/cmd/root.go",
+    "Kind": "file",
+    "Size": 2256,
+    "Depth": 2,
+    "Content": "",
+    "Ignored": false,
+    "Error": ""
+  },
+  {
+    "Path": "/home/zedolph/project-zero/catls/go.mod",
+    "Kind": "file",
+    "Size": 182,
+    "Depth": 1,
+    "Content": "",
+    "Ignored": false,
+    "Error": ""
+  },
+  {
+    "Path": "/home/zedolph/project-zero/catls/go.sum",
+    "Kind": "file",
+    "Size": 985,
+    "Depth": 1,
+    "Content": "",
+    "Ignored": false,
+    "Error": ""
+  },
+  {
+    "Path": "/home/zedolph/project-zero/catls/internal",
+    "Kind": "dir",
+    "Size": 4096,
+    "Depth": 1,
+    "Content": "",
+    "Ignored": false,
+    "Error": ""
+  },
+  {
+    "Path": "/home/zedolph/project-zero/catls/internal/filter.go",
+    "Kind": "file",
+    "Size": 16,
+    "Depth": 2,
+    "Content": "",
+    "Ignored": false,
+    "Error": ""
+  },
+  {
+    "Path": "/home/zedolph/project-zero/catls/internal/formatter.go",
+    "Kind": "file",
+    "Size": 2058,
+    "Depth": 2,
+    "Content": "",
+    "Ignored": false,
+    "Error": ""
+  },
+  {
+    "Path": "/home/zedolph/project-zero/catls/internal/scanner.go",
+    "Kind": "file",
+    "Size": 2445,
+    "Depth": 2,
+    "Content": "",
+    "Ignored": false,
+    "Error": ""
+  },
+  {
+    "Path": "/home/zedolph/project-zero/catls/main.go",
+    "Kind": "file",
+    "Size": 76,
+    "Depth": 1,
+    "Content": "",
+    "Ignored": false,
+    "Error": ""
+  }
+]
