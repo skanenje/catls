@@ -1,130 +1,71 @@
 package internal
 
 import (
-	"bufio"
-	"io/fs"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-// FileEntry represents one filesystem entity.
-type FileEntry struct {
-	Path    string
-	Kind    string // "file", "dir", "symlink"
-	Size    int64
-	Depth   int
-	Content string
-	Ignored bool
-	Error   string
+// DumpConfig defines limits for recursive file dumping
+type DumpConfig struct {
+	MaxDepth    int
+	MaxFileSize int64 // bytes
 }
 
-// ScanDirStream walks the directory recursively and streams entries into a channel.
-// fullContent = true to read full files (used for JSON output), false for preview/Markdown
-func ScanDirStream(root string, maxDepth int, ignore []string, showContent bool, lines int, fullContent bool, out chan<- FileEntry) error {
-	defer close(out)
-
-	rootAbs, _ := filepath.Abs(root)
-
-	return filepath.WalkDir(rootAbs, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			out <- FileEntry{Path: path, Error: err.Error()}
-			return nil
+// Heuristic to detect text-like files
+func IsTextFile(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	textExts := []string{
+		".go", ".js", ".ts", ".json", ".py", ".rs", ".c", ".cpp",
+		".h", ".html", ".css", ".md", ".txt", ".sh", ".yaml", ".yml",
+	}
+	for _, e := range textExts {
+		if ext == e {
+			return true
 		}
+	}
+	return false
+}
 
-		// Depth calculation
-		rel, err := filepath.Rel(rootAbs, path)
-		if err != nil {
-			rel = path
-		}
-		depth := 0
-		if rel != "." {
-			depth = strings.Count(filepath.ToSlash(rel), "/") + 1
-		}
-
-		if maxDepth >= 0 && depth > maxDepth {
-			if d.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-
-		// Ignore patterns
-		for _, ig := range ignore {
-			if strings.Contains(path, ig) {
-				if d.IsDir() {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-		}
-
-		info, err := d.Info()
-		if err != nil {
-			out <- FileEntry{Path: path, Error: err.Error()}
-			return nil
-		}
-
-		entry := FileEntry{
-			Path:  path,
-			Kind:  kindFromDirEntry(d),
-			Size:  info.Size(),
-			Depth: depth,
-		}
-
-		// Read file content if requested
-		if !d.IsDir() && info.Size() > 0 {
-			readFull := fullContent || showContent
-			content, ok := readFileContent(path, lines, readFull)
-			if ok {
-				entry.Content = content
-			}
-		}
-
-		out <- entry
+// DumpRecursive walks a directory tree and prints readable file contents.
+func DumpRecursive(root string, cfg DumpConfig, depth int) error {
+	if cfg.MaxDepth >= 0 && depth > cfg.MaxDepth {
 		return nil
-	})
-}
+	}
 
-// readFileContent reads first n lines or full content based on 'full'
-func readFileContent(path string, n int, full bool) (string, bool) {
-	f, err := os.Open(path)
+	entries, err := os.ReadDir(root)
 	if err != nil {
-		return "", false
-	}
-	defer f.Close()
-
-	// Skip binary files
-	buf := make([]byte, 8000)
-	count, _ := f.Read(buf)
-	if strings.ContainsRune(string(buf[:count]), '\x00') {
-		return "", false
+		return fmt.Errorf("failed to read dir %s: %w", root, err)
 	}
 
-	f.Seek(0, 0) // rewind
+	for _, entry := range entries {
+		fullPath := filepath.Join(root, entry.Name())
 
-	scanner := bufio.NewScanner(f)
-	var lines []string
-
-	if full {
-		for scanner.Scan() {
-			lines = append(lines, scanner.Text())
+		info, err := os.Stat(fullPath)
+		if err != nil {
+			continue
 		}
-	} else {
-		for i := 0; i < n && scanner.Scan(); i++ {
-			lines = append(lines, scanner.Text())
+
+		if entry.IsDir() {
+			_ = DumpRecursive(fullPath, cfg, depth+1)
+			continue
 		}
-	}
 
-	return strings.Join(lines, "\n"), true
-}
+		if !IsTextFile(fullPath) || info.Size() > cfg.MaxFileSize {
+			continue
+		}
 
-func kindFromDirEntry(d fs.DirEntry) string {
-	if d.IsDir() {
-		return "dir"
+		data, err := os.ReadFile(fullPath)
+		if err != nil {
+			continue
+		}
+
+		fmt.Printf("\n### %s\n", fullPath)
+		fmt.Printf("Size: %d bytes\n", info.Size())
+		fmt.Println("---")
+		fmt.Println(string(data))
+		fmt.Println("\n------------------- end of file -------------------------")
 	}
-	if d.Type()&fs.ModeSymlink != 0 {
-		return "symlink"
-	}
-	return "file"
+	return nil
 }
