@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,7 +30,7 @@ func IsTextFile(path string) bool {
 }
 
 // DumpRecursive walks a directory tree and prints readable file contents.
-func DumpRecursive(root string, cfg DumpConfig, depth int) error {
+func DumpRecursive(root string, cfg DumpConfig, depth int, out io.Writer) error {
 	if cfg.MaxDepth >= 0 && depth > cfg.MaxDepth {
 		return nil
 	}
@@ -48,7 +49,7 @@ func DumpRecursive(root string, cfg DumpConfig, depth int) error {
 		}
 
 		if entry.IsDir() {
-			_ = DumpRecursive(fullPath, cfg, depth+1)
+			_ = DumpRecursive(fullPath, cfg, depth+1, out)
 			continue
 		}
 
@@ -61,11 +62,12 @@ func DumpRecursive(root string, cfg DumpConfig, depth int) error {
 			continue
 		}
 
-		fmt.Printf("\n### %s\n", fullPath)
-		fmt.Printf("Size: %d bytes\n", info.Size())
-		fmt.Println("---")
-		fmt.Println(string(data))
-		fmt.Println("\n------------------- end of file -------------------------")
+		fmt.Fprintf(out, "\n### %s\n", fullPath)
+		fmt.Fprintf(out, "Size: %d bytes\n", info.Size())
+		fmt.Fprintln(out, "---")
+		fmt.Fprintln(out, string(data))
+		fmt.Fprintln(out, "\n--- end of file ---")
 	}
+
 	return nil
 }
