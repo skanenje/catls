@@ -1,3 +1,4 @@
+// cmd/root.go
 package cmd
 
 import (
@@ -24,54 +25,68 @@ type Config struct {
 
 var cfg Config
 
+// rootCmd is the base command
 var rootCmd = &cobra.Command{
 	Use:   "catls [path]",
 	Short: "catls merges cat + ls to serialize structure and content",
 	Long: `catls recursively walks directories, reading both structure and file contents
-to produce AI-friendly Markdown or JSON output.`,
+to produce AI-friendly Markdown or JSON output.
+
+Examples:
+  catls ./ --max-depth=2
+  catls ./ --format=json --output=project.json
+  catls ./ --ignore=.git,node_modules --show-content --lines=5
+
+Flags:
+  --max-depth <n>     Limit recursion depth
+  --max-size <bytes>  Max bytes per file to read (default 64000)
+  --format <mode>     Output format: markdown | json
+  --ignore <list>     Comma-separated ignore patterns
+  --summary           Only show structure (no file contents)
+  --show-content      Include file contents (Markdown only)
+  --lines <n>         Number of preview lines with --show-content
+  --output <path>     Write output to file instead of stdout
+  -h, --help          Show this help message`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// --- Assign runtime arguments
 		cfg.Path = args[0]
-
-		// Determine if full content is needed (JSON always includes full content)
 		fullContent := cfg.OutputMode == "json"
 
-		// Buffered channel for streaming entries
-		entriesChan := make(chan internal.FileEntry, 100)
+		// --- Display configuration summary for verification
+		fmt.Printf("\n▶ Running catls on: %s\n", cfg.Path)
+		fmt.Printf("• Depth: %d | MaxSize: %d bytes\n", cfg.MaxDepth, cfg.MaxSize)
+		fmt.Printf("• Format: %s | Summary: %v | ShowContent: %v | Lines: %d\n",
+			cfg.OutputMode, cfg.Summary, cfg.ShowContent, cfg.Lines)
+		fmt.Printf("• Ignore: %v\n", cfg.Ignore)
+		if cfg.OutputFile != "" {
+			fmt.Printf("• Output File: %s\n\n", cfg.OutputFile)
+		} else {
+			fmt.Println("• Output: stdout")
+		}
 
-		// Launch scanner in a goroutine
-		go func() {
-			err := internal.ScanDirStream(cfg.Path, cfg.MaxDepth, cfg.Ignore, cfg.ShowContent, cfg.Lines, fullContent, entriesChan)
+		// --- Choose destination
+		out := os.Stdout
+		if cfg.OutputFile != "" {
+			f, err := os.Create(cfg.OutputFile)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error scanning directory: %v\n", err)
+				return fmt.Errorf("failed to create output file: %w", err)
 			}
-		}()
-
-		// Writer function for formatter
-		writerFunc := func(s string) {
-			if cfg.OutputFile != "" {
-				f, err := os.OpenFile(cfg.OutputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error writing file: %v\n", err)
-					return
-				}
-				defer f.Close()
-				f.WriteString(s)
-			} else {
-				fmt.Print(s)
-			}
+			defer f.Close()
+			out = f
 		}
 
-		// Summary-only mode: print basic info without content
-		if cfg.Summary {
-			for entry := range entriesChan {
-				fmt.Printf("[%s] %s (%d bytes, depth=%d)\n", entry.Kind, entry.Path, entry.Size, entry.Depth)
-			}
-			return nil
-		}
-
-		// Stream entries to formatter
-		return internal.StreamFormatEntries(entriesChan, internal.FormatMode(cfg.OutputMode), writerFunc)
+		// --- Stream output
+		return internal.StreamFormatEntries(
+			out,
+			cfg.Path,
+			internal.FormatMode(cfg.OutputMode),
+			cfg.MaxDepth,
+			cfg.Ignore,
+			cfg.ShowContent,
+			cfg.Lines,
+			fullContent,
+		)
 	},
 }
 
@@ -84,12 +99,15 @@ func Execute() {
 }
 
 func init() {
+	// Register flags
 	rootCmd.Flags().IntVar(&cfg.MaxDepth, "max-depth", -1, "Limit recursion depth")
-	rootCmd.Flags().Int64Var(&cfg.MaxSize, "max-size", 64000, "Max bytes per file")
+	rootCmd.Flags().Int64Var(&cfg.MaxSize, "max-size", 64000, "Max bytes per file to read")
 	rootCmd.Flags().StringVar(&cfg.OutputMode, "format", "markdown", "Output format: markdown or json")
-	rootCmd.Flags().StringSliceVar(&cfg.Ignore, "ignore", []string{".git", "node_modules"}, "Ignore patterns")
+	rootCmd.Flags().StringSliceVar(&cfg.Ignore, "ignore", []string{".git", "node_modules"}, "Ignore patterns (comma separated)")
 	rootCmd.Flags().BoolVar(&cfg.Summary, "summary", false, "Structure only, no content")
 	rootCmd.Flags().StringVar(&cfg.OutputFile, "output", "", "Write output to file instead of stdout")
-	rootCmd.Flags().BoolVar(&cfg.ShowContent, "show-content", false, "Show file content preview in Markdown")
-	rootCmd.Flags().IntVar(&cfg.Lines, "lines", 5, "Number of lines to preview if --show-content is true")
+	rootCmd.Flags().BoolVar(&cfg.ShowContent, "show-content", false, "Include file contents (Markdown mode only)")
+	rootCmd.Flags().IntVar(&cfg.Lines, "lines", 10, "Number of preview lines to read when using --show-content")
+
+	// Cobra automatically wires --help and -h
 }
