@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"github.com/spf13/cobra"
+	"catls/internal"
+
 )
 
 // Config holds runtime options
@@ -30,15 +32,18 @@ to produce AI-friendly Markdown or JSON output.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg.Path = args[0]
 
-		// For now, just print parsed config (placeholder for pipeline)
-		fmt.Printf("Running catls on: %s\n", cfg.Path)
-		fmt.Printf("Depth: %d, MaxSize: %d bytes, Format: %s\n",
-			cfg.MaxDepth, cfg.MaxSize, cfg.OutputMode)
-		fmt.Printf("Ignore: %v\n", cfg.Ignore)
-		fmt.Printf("Summary: %v\n", cfg.Summary)
-		fmt.Printf("Output File: %s\n", cfg.OutputFile)
+		entries, err := internal.ScanDir(cfg.Path, cfg.MaxDepth, cfg.Ignore)
+		if err != nil {
+			return err
+		}
+
+		for _, e := range entries {
+			fmt.Printf("[%s] %s (%d bytes, depth=%d)\n", e.Kind, e.Path, e.Size, e.Depth)
+		}
+
 
 		// In Stage 4.2, we’ll call the scanner and formatter here.
+		
 		return nil
 	},
 }
