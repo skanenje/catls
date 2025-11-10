@@ -66,7 +66,7 @@ func DumpRecursive(root string, cfg DumpConfig, depth int, out io.Writer) error 
 		fmt.Fprintf(out, "Size: %d bytes\n", info.Size())
 		fmt.Fprintln(out, "---")
 		fmt.Fprintln(out, string(data))
-		fmt.Fprintln(out, "\n--- end of file ---")
+		fmt.Fprintln(out, "\n----------------- end of file ----------------")
 	}
 
 	return nil
